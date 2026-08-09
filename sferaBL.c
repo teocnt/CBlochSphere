@@ -9,7 +9,7 @@
 #define WINDOW_HEIGHT 900
 #define OFFSETX WINDOW_WIDTH/2
 #define OFFSETY WINDOW_HEIGHT/2
-#define SCALE 400
+#define SCALE 600
 #define DELAY 20
 #define PRESPECTIVE 3.0
 
@@ -43,12 +43,20 @@ typedef struct{
 }Connection;
 
 typedef struct{
-  double radius;
   Vec3 *points;
   int nPoints;
   Connection *connections;
   int nConnections;
+  double xRotationAngle;
+  double yRotationAngle;
+  Vec3 *rotatedPoints;
+}Model;
+
+typedef struct{
+  double radius;
+  Model model;
 }Sphere;
+
 
 // parametri per motore grafico
 double globalScaling = SCALE;
@@ -69,20 +77,28 @@ void calculateSpherePoints(int, Vec3*);
 void calculateSphereConnections(int, Connection*);
 void drawSphere(Sphere*,bool);
 Vec2 projectsP3(Vec3);
-void drawSystemVector(Polar2);
+void drawSystemVector(Polar2,double,double);
 void drawThickLine(SDL_Renderer*,Vec2,Vec2,int);
+Vec3 rotateYVec3(Vec3,double);
+Vec3 rotateXVec3(Vec3,double);
+void applyXGate(Polar2*);
+void applyYGate(Polar2*);
+void applyZGate(Polar2*);
+void resetState(Polar2*);
 
 
 int main(void){
   bool execution = true;
   Polar2 systemState = {0,0};
   //modello sfera
-  Sphere sphereData = {1,NULL,NPAR*NMER,NULL,(NPAR*NMER) + ((NPAR-1)*NMER)};
-  sphereData.points = malloc(sphereData.nPoints*sizeof(Vec3));
-  sphereData.connections = malloc(sphereData.nConnections*sizeof(Connection));
-  calculateSphereModel(&sphereData); 
+  Sphere sphereData = {1,{NULL,NPAR*NMER,NULL,(NPAR*NMER) + ((NPAR-1)*NMER),0,0,NULL}};
+  sphereData.model.points = malloc(sphereData.model.nPoints*sizeof(Vec3));
+  sphereData.model.connections = malloc(sphereData.model.nConnections*sizeof(Connection));
+  calculateSphereModel(&sphereData);
 
-  if(SDL_Init(SDL_INIT_VIDEO) != 0){
+  double rotationSense = 0.01;
+
+  if (SDL_Init(SDL_INIT_VIDEO) != 0){
     printf("errore durante l'inizializzazione di SDL: %s\n",SDL_GetError());
     return 1;
   }
@@ -119,8 +135,41 @@ int main(void){
       if(event.type == SDL_QUIT){
         execution = false;
       }else if(event.type == SDL_KEYDOWN){
-        if(event.key.keysym.sym == SDLK_ESCAPE){
-          execution = false;
+
+        switch(event.key.keysym.sym){
+          case SDLK_ESCAPE:
+            execution = false;
+            break;
+          case SDLK_x:
+            applyXGate(&systemState);
+            break;
+          case SDLK_y:
+            applyYGate(&systemState);
+            break;
+          case SDLK_z:
+            applyZGate(&systemState);
+            break;
+          case SDLK_r:
+            resetState(&systemState);
+            break;
+          default:
+            break; 
+        }
+
+      }else if(event.type == SDL_MOUSEMOTION){
+        if(event.motion.state & SDL_BUTTON_LMASK){
+          sphereData.model.yRotationAngle -= event.motion.xrel * rotationSense;
+          sphereData.model.xRotationAngle -= event.motion.yrel * rotationSense;
+
+          sphereData.model.yRotationAngle = fmod(sphereData.model.yRotationAngle, 2 * M_PI);
+          if (sphereData.model.yRotationAngle < 0) {
+            sphereData.model.yRotationAngle += 2 * M_PI;
+          }
+
+          sphereData.model.xRotationAngle = fmod(sphereData.model.xRotationAngle, 2 * M_PI);
+          if (sphereData.model.xRotationAngle < 0) {
+            sphereData.model.xRotationAngle += 2 * M_PI;
+          }
         }
       }
 
@@ -135,7 +184,7 @@ int main(void){
     
 
     SDL_SetRenderDrawColor(renderer, 0,0,255,255);
-    drawSystemVector(systemState);
+    drawSystemVector(systemState,sphereData.model.xRotationAngle,sphereData.model.yRotationAngle);
     
     SDL_SetRenderDrawColor(renderer, 255,255,255,125);
     drawSphere(&sphereData,true);
@@ -167,8 +216,8 @@ Vec3 fromPolarToCartesian(Polar2 polarCoordinates){
 }
 
 void calculateSphereModel(Sphere *sphere){
-  calculateSpherePoints(sphere->nPoints,sphere->points);
-  calculateSphereConnections(sphere->nConnections, sphere->connections);
+  calculateSpherePoints(sphere->model.nPoints,sphere->model.points);
+  calculateSphereConnections(sphere->model.nConnections, sphere->model.connections);
 }
 
 void calculateSpherePoints(int nPoints, Vec3* points){
@@ -213,21 +262,23 @@ void calculateSphereConnections(int nConnections,Connection *connections){
 
 
 void drawSphere(Sphere *sphere,bool drawFront){
-  Vec2 projectedPoints[sphere->nPoints];
+  Vec2 projectedPoints[sphere->model.nPoints];
+  Vec3 rotatedPoints[sphere->model.nPoints];
   Connection tmpC;
   Vec2 p1;
   Vec2 p2;
-  for(int i = 0;i < sphere->nPoints; i++){
-    projectedPoints[i] = projectsP3(sphere->points[i]);
+  for(int i = 0;i < sphere->model.nPoints; i++){
+    rotatedPoints[i] = rotateXVec3(rotateYVec3(sphere->model.points[i],sphere->model.yRotationAngle),sphere->model.xRotationAngle);
+    projectedPoints[i] = projectsP3(rotatedPoints[i]);
   }
-  for(int i = 0; i < sphere->nConnections; i++){
-    tmpC = sphere->connections[i];
+  for(int i = 0; i < sphere->model.nConnections; i++){
+    tmpC = sphere->model.connections[i];
     p1 = projectedPoints[tmpC.start];
     p2 =  projectedPoints[tmpC.end];
 
 
-    double z1 = sphere->points[tmpC.start].z;
-    double z2 = sphere->points[tmpC.end].z;
+    double z1 = rotatedPoints[tmpC.start].z;
+    double z2 = rotatedPoints[tmpC.start].z;
     double zMid = (z1 + z2) / 2.0;
 
     if(drawFront && zMid > 0) continue;
@@ -248,9 +299,9 @@ Vec2 projectsP3(Vec3 point){
   return pointRet;
 }
 
-void drawSystemVector(Polar2 systemState){
+void drawSystemVector(Polar2 systemState,double xRotationAngle, double yRotationAngle){
   Vec3 cartesianPoint = fromPolarToCartesian(systemState);
-  Vec2 pPoint = projectsP3(cartesianPoint);
+  Vec2 pPoint = projectsP3(rotateXVec3(rotateYVec3(cartesianPoint,yRotationAngle),xRotationAngle));
   Vec2 origin = {xOffset,yOffset};
   SDL_Rect systemRect = {
     .x = pPoint.x-1,
@@ -281,4 +332,43 @@ void drawThickLine(SDL_Renderer *renderer,Vec2 p1, Vec2 p2, int thickness){
 
 
   drawThickLine(renderer,p1,p2,thickness-1);
+}
+
+Vec3 rotateYVec3(Vec3 point, double angle){
+  double xNew = (point.x * cos(angle)) + (point.z * sin(angle));
+  double zNew = (-1*(point.x * sin(angle))) + (point.z * cos(angle));
+  Vec3 pointRotated = {xNew,point.y,zNew};
+  return pointRotated;
+}
+Vec3 rotateXVec3(Vec3 point,double angle){
+  double yNew = (point.y * cos(angle)) - (point.z * sin(angle));
+  double zNew = (point.y * sin(angle)) + (point.z * cos(angle));
+  Vec3 pointRotated = {point.x,yNew,zNew};
+  return pointRotated;
+}
+
+
+void applyZGate(Polar2 *systemState){
+  systemState->phi += M_PI;
+  systemState->phi = fmod(systemState->phi, 2*M_PI);
+}
+
+void applyXGate(Polar2 *systemState){
+  systemState->theta = M_PI - systemState->theta;
+  systemState->phi = -1 * systemState->phi;
+  if(systemState->phi < 0){
+    systemState->phi+=2*M_PI;
+  }
+}
+
+void applyYGate(Polar2* systemState){
+  systemState->theta = M_PI - systemState->theta;
+  systemState->phi =M_PI - systemState->phi;
+  if(systemState->phi < 0){
+    systemState->phi+=2*M_PI;
+  }
+}
+void resetState(Polar2 * systemState){
+  systemState->theta = 0.0;
+  systemState->phi = 0.0;
 }
