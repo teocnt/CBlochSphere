@@ -10,7 +10,6 @@
 #define OFFSETX WINDOW_WIDTH/2
 #define OFFSETY WINDOW_HEIGHT/2
 #define SCALE 600
-#define DELAY 20
 #define PRESPECTIVE 3.0
 
 #define RADIUS 1
@@ -320,7 +319,7 @@ void drawSphere(Sphere *sphere,bool drawFront){
 
 
     double z1 = rotatedPoints[tmpC.start].z;
-    double z2 = rotatedPoints[tmpC.start].z;
+    double z2 = rotatedPoints[tmpC.end].z;
     double zMid = (z1 + z2) / 2.0;
 
     if(drawFront && zMid > 0) continue;
