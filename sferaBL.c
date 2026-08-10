@@ -72,6 +72,7 @@ SDL_Event event;
 
 
 Vec3 fromPolarToCartesian(Polar2);
+Polar2 fromCartesianToPolar(Vec3);
 void calculateSphereModel(Sphere*);
 void calculateSpherePoints(int, Vec3*);
 void calculateSphereConnections(int, Connection*);
@@ -81,10 +82,12 @@ void drawSystemVector(Polar2,double,double);
 void drawThickLine(SDL_Renderer*,Vec2,Vec2,int);
 Vec3 rotateYVec3(Vec3,double);
 Vec3 rotateXVec3(Vec3,double);
+Vec3 rotateZVec3(Vec3,double);
 void applyXGate(Polar2*);
 void applyYGate(Polar2*);
 void applyZGate(Polar2*);
 void resetState(Polar2*);
+void apply45RotationGate(Polar2*,char);
 
 
 int main(void){
@@ -97,6 +100,9 @@ int main(void){
   calculateSphereModel(&sphereData);
 
   double rotationSense = 0.01;
+  Uint32 flags;
+  int actualWidth;
+  int actualHeight;
 
   if (SDL_Init(SDL_INIT_VIDEO) != 0){
     printf("errore durante l'inizializzazione di SDL: %s\n",SDL_GetError());
@@ -127,7 +133,8 @@ int main(void){
     SDL_Quit();
     return 1;
   }
-
+  
+  printf("stato iniziale del sistema theta: %.2f, phi: %.2f\n",systemState.theta,systemState.phi);
   while(execution){
 
     //event handling
@@ -141,19 +148,40 @@ int main(void){
             execution = false;
             break;
           case SDLK_x:
-            applyXGate(&systemState);
+            if(event.key.keysym.mod & KMOD_SHIFT){
+              apply45RotationGate(&systemState,'X');
+            }else applyXGate(&systemState);
+            printf("nuovo stato del sistema theta: %.2f, phi: %.2f\n",systemState.theta,systemState.phi);
             break;
           case SDLK_y:
-            applyYGate(&systemState);
+            if(event.key.keysym.mod & KMOD_SHIFT){
+              apply45RotationGate(&systemState,'Y');
+            }else applyYGate(&systemState);
+            printf("nuovo stato del sistema theta: %.2f, phi: %.2f\n",systemState.theta,systemState.phi);
             break;
           case SDLK_z:
-            applyZGate(&systemState);
+            if(event.key.keysym.mod & KMOD_SHIFT){
+              apply45RotationGate(&systemState,'Z');
+            }else applyZGate(&systemState);
+            printf("nuovo stato del sistema theta: %.2f, phi: %.2f\n",systemState.theta,systemState.phi);
             break;
           case SDLK_r:
             resetState(&systemState);
             break;
+          case SDLK_f:
+            flags = SDL_GetWindowFlags(window);
+            if(flags & SDL_WINDOW_FULLSCREEN_DESKTOP){
+              SDL_SetWindowFullscreen(window, 0);
+            }
+            else{
+              SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN_DESKTOP);
+            }
+            SDL_GetWindowSize(window, &actualWidth, &actualHeight);
+            xOffset = actualWidth /2.0;
+            yOffset = actualHeight / 2.0;
+            break;
           default:
-            break; 
+            break;
         }
 
       }else if(event.type == SDL_MOUSEMOTION){
@@ -193,7 +221,6 @@ int main(void){
     SDL_RenderPresent(renderer);
 
 
-
   }
   SDL_DestroyRenderer(renderer);
   SDL_DestroyWindow(window);
@@ -212,6 +239,21 @@ Vec3 fromPolarToCartesian(Polar2 polarCoordinates){
   cartesianCoordinates.x = sin(polarCoordinates.theta) * cos(polarCoordinates.phi);
   cartesianCoordinates.z = sin(polarCoordinates.theta) * sin(polarCoordinates.phi);
   return cartesianCoordinates;
+}
+
+Polar2 fromCartesianToPolar(Vec3 cartesianCoordinates){
+  double y_val = cartesianCoordinates.y;
+  if(y_val > 1.0) y_val = 1.0;
+  if(y_val < -1.0) y_val = -1.0;
+  double theta = acos(y_val);
+  double phi = atan2(cartesianCoordinates.z,cartesianCoordinates.x);
+  Polar2 polarCoordinates;
+  if (phi < 0) {
+    phi += 2.0 * M_PI;
+  }
+  polarCoordinates.theta = theta;
+  polarCoordinates.phi = phi;
+  return polarCoordinates;
 
 }
 
@@ -347,6 +389,13 @@ Vec3 rotateXVec3(Vec3 point,double angle){
   return pointRotated;
 }
 
+Vec3 rotateZVec3(Vec3 point,double angle){
+  double xNew = (point.x * cos(angle)) - (point.y * sin(angle));
+  double yNew = (point.x * sin(angle)) + (point.y * cos(angle));
+  Vec3 pointRotated = {xNew,yNew,point.z};
+  return pointRotated;
+}
+
 
 void applyZGate(Polar2 *systemState){
   systemState->phi += M_PI;
@@ -371,4 +420,26 @@ void applyYGate(Polar2* systemState){
 void resetState(Polar2 * systemState){
   systemState->theta = 0.0;
   systemState->phi = 0.0;
+}
+
+void apply45RotationGate(Polar2 *systemState,char axis){
+  Polar2 newState;
+  Vec3 cartesianCoordinates = fromPolarToCartesian(*systemState);
+  switch(axis){
+    case 'X':
+      cartesianCoordinates = rotateXVec3(cartesianCoordinates,M_PI/4);
+      break;
+    case 'Y':
+      cartesianCoordinates = rotateZVec3(cartesianCoordinates,M_PI/4);
+      break;
+    case 'Z':
+      cartesianCoordinates = rotateYVec3(cartesianCoordinates,M_PI/4);
+      break;
+    default:
+      return;
+  }
+
+  newState = fromCartesianToPolar(cartesianCoordinates);
+  systemState->theta = newState.theta;
+  systemState->phi = newState.phi;
 }
