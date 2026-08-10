@@ -48,7 +48,6 @@ typedef struct{
   int nConnections;
   double xRotationAngle;
   double yRotationAngle;
-  Vec3 *rotatedPoints;
 }Model;
 
 typedef struct{
@@ -93,9 +92,13 @@ int main(void){
   bool execution = true;
   Polar2 systemState = {0,0};
   //modello sfera
-  Sphere sphereData = {1,{NULL,NPAR*NMER,NULL,(NPAR*NMER) + ((NPAR-1)*NMER),0,0,NULL}};
+  Sphere sphereData = {1,{NULL,NPAR*NMER,NULL,(NPAR*NMER) + ((NPAR-1)*NMER),0,0}};
   sphereData.model.points = malloc(sphereData.model.nPoints*sizeof(Vec3));
   sphereData.model.connections = malloc(sphereData.model.nConnections*sizeof(Connection));
+  if(sphereData.model.points == NULL || sphereData.model.connections == NULL){
+    printf("error while allocating the sphere model\n");
+    return 1;
+  }
   calculateSphereModel(&sphereData);
 
   double rotationSense = 0.01;
@@ -104,12 +107,14 @@ int main(void){
   int actualHeight;
 
   if (SDL_Init(SDL_INIT_VIDEO) != 0){
-    printf("errore durante l'inizializzazione di SDL: %s\n",SDL_GetError());
+    printf("error while initializing SDL: %s\n",SDL_GetError());
+    free(sphereData.model.points);
+    free(sphereData.model.connections);
     return 1;
   }
 
   window = SDL_CreateWindow(
-    "rotating cube",
+    "bloch sphere",
     SDL_WINDOWPOS_CENTERED,
     SDL_WINDOWPOS_CENTERED,
     WINDOW_WIDTH,
@@ -119,21 +124,25 @@ int main(void){
 
 
   if(window == NULL){
-    printf("errore nella creazione della finestra: %s\n",SDL_GetError());
+    printf("error while creating the window: %s\n",SDL_GetError());
     SDL_Quit();
+    free(sphereData.model.points);
+    free(sphereData.model.connections);
     return 1;
   }
 
   renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
 
   if (renderer == NULL) {
-    printf("Errore nella creazione del renderer: %s\n", SDL_GetError());
+    printf("error while creating the renderer: %s\n", SDL_GetError());
     SDL_DestroyWindow(window);
     SDL_Quit();
+    free(sphereData.model.points);
+    free(sphereData.model.connections);
     return 1;
   }
   
-  printf("stato iniziale del sistema theta: %.2f, phi: %.2f\n",systemState.theta,systemState.phi);
+  printf("initial system state theta: %.2f, phi: %.2f\n",systemState.theta,systemState.phi);
   while(execution){
 
     //event handling
@@ -150,22 +159,23 @@ int main(void){
             if(event.key.keysym.mod & KMOD_SHIFT){
               apply45RotationGate(&systemState,'X');
             }else applyXGate(&systemState);
-            printf("nuovo stato del sistema theta: %.2f, phi: %.2f\n",systemState.theta,systemState.phi);
+            printf("new system state theta: %.2f, phi: %.2f\n",systemState.theta,systemState.phi);
             break;
           case SDLK_y:
             if(event.key.keysym.mod & KMOD_SHIFT){
               apply45RotationGate(&systemState,'Y');
             }else applyYGate(&systemState);
-            printf("nuovo stato del sistema theta: %.2f, phi: %.2f\n",systemState.theta,systemState.phi);
+            printf("new system state theta: %.2f, phi: %.2f\n",systemState.theta,systemState.phi);
             break;
           case SDLK_z:
             if(event.key.keysym.mod & KMOD_SHIFT){
               apply45RotationGate(&systemState,'Z');
             }else applyZGate(&systemState);
-            printf("nuovo stato del sistema theta: %.2f, phi: %.2f\n",systemState.theta,systemState.phi);
+            printf("new system state theta: %.2f, phi: %.2f\n",systemState.theta,systemState.phi);
             break;
           case SDLK_r:
             resetState(&systemState);
+            printf("new system state theta: %.2f, phi: %.2f\n",systemState.theta,systemState.phi);
             break;
           case SDLK_f:
             flags = SDL_GetWindowFlags(window);
@@ -225,7 +235,8 @@ int main(void){
   SDL_DestroyWindow(window);
 
   SDL_Quit();
-
+  free(sphereData.model.points);
+  free(sphereData.model.connections);
   return EXIT_SUCCESS;
 
 }

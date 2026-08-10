@@ -1,74 +1,74 @@
 # sferaBloch (`sbl`)
 
-Visualizzatore interattivo della **sfera di Bloch** scritto in C puro con SDL2.
+An interactive **Bloch sphere** visualizer written in plain C with SDL2.
 
-Il programma disegna un wireframe di sfera in proiezione prospettica, ruotabile con il mouse, e un vettore di stato che rappresenta lo stato di un qubit singolo. Da tastiera si applicano gate quantistici (Pauli X/Y/Z e rotazioni di 45°) e si osserva il movimento del vettore sulla sfera.
+The program renders a wireframe sphere in perspective projection, rotatable with the mouse, plus a state vector representing the state of a single qubit. Keyboard input applies quantum gates (Pauli X/Y/Z and 45° rotations) so you can watch the vector move across the sphere.
 
 Repo: <https://github.com/teocnt/CBlochSphere>
 
 ---
 
-## Indice
+## Contents
 
-- [Comandi](#comandi)
-- [Logiche matematiche](#logiche-matematiche)
-  - [Convenzione degli assi](#convenzione-degli-assi)
-  - [Coordinate polari ↔ cartesiane](#coordinate-polari--cartesiane)
-  - [Generazione del modello della sfera](#generazione-del-modello-della-sfera)
-  - [Rotazioni 3D](#rotazioni-3d)
-  - [Proiezione prospettica](#proiezione-prospettica)
-  - [Ordinamento in profondità (back/front)](#ordinamento-in-profondità-backfront)
-  - [Linee spesse](#linee-spesse)
-  - [Gate quantistici](#gate-quantistici)
-- [Installazione e compilazione](#installazione-e-compilazione)
-- [Compatibilità tra sistemi operativi](#compatibilità-tra-sistemi-operativi)
-- [Struttura del progetto](#struttura-del-progetto)
-- [Note e limiti noti](#note-e-limiti-noti)
+- [Controls](#controls)
+- [The math behind it](#the-math-behind-it)
+  - [Axis convention](#axis-convention)
+  - [Polar ↔ Cartesian conversion](#polar--cartesian-conversion)
+  - [Sphere mesh generation](#sphere-mesh-generation)
+  - [3D rotations](#3d-rotations)
+  - [Perspective projection](#perspective-projection)
+  - [Depth ordering (back/front)](#depth-ordering-backfront)
+  - [Thick lines](#thick-lines)
+  - [Quantum gates](#quantum-gates)
+- [Installation and build](#installation-and-build)
+- [Cross-platform compatibility](#cross-platform-compatibility)
+- [Project layout](#project-layout)
+- [Notes and known limits](#notes-and-known-limits)
 
 ---
 
-## Comandi
+## Controls
 
-| Input | Azione |
+| Input | Action |
 |---|---|
-| Trascinamento con tasto sinistro del mouse | Ruota la sfera (yaw/pitch) |
-| `X` | Applica il gate di Pauli **X** |
-| `Y` | Applica il gate di Pauli **Y** |
-| `Z` | Applica il gate di Pauli **Z** |
-| `Shift` + `X` / `Y` / `Z` | Rotazione di **45°** attorno all'asse corrispondente |
-| `R` | Reset dello stato a \|0⟩ |
-| `F` | Attiva/disattiva fullscreen (ricalcola gli offset di centratura) |
-| `Esc` o chiusura finestra | Uscita |
+| Left-click drag | Rotate the sphere (yaw/pitch) |
+| `X` | Apply the Pauli **X** gate |
+| `Y` | Apply the Pauli **Y** gate |
+| `Z` | Apply the Pauli **Z** gate |
+| `Shift` + `X` / `Y` / `Z` | **45°** rotation about the corresponding axis |
+| `R` | Reset the state to \|0⟩ |
+| `F` | Toggle fullscreen (recomputes centering offsets) |
+| `Esc` or window close | Quit |
 
-Ad ogni gate applicato il nuovo stato `(theta, phi)` viene stampato su stdout.
+Every time a gate is applied, the new state `(theta, phi)` is printed to stdout.
 
 ---
 
-## Logiche matematiche
+## The math behind it
 
-### Convenzione degli assi
+### Axis convention
 
-Il codice usa una convenzione "grafica" in cui **l'asse polare è `y`** (verticale sullo schermo) e `z` è l'asse di profondità, uscente verso l'osservatore. La corrispondenza con gli assi della sfera di Bloch è quindi:
+The code uses a "graphics" convention in which **the polar axis is `y`** (vertical on screen) and `z` is the depth axis, pointing towards the viewer. The mapping to Bloch sphere axes is therefore:
 
-| Sfera di Bloch | Asse nel codice | Direzione a schermo |
+| Bloch sphere | Axis in code | On-screen direction |
 |---|---|---|
-| Z (asse \|0⟩–\|1⟩) | `y` | verticale |
-| X | `x` | orizzontale |
-| Y | `z` | profondità |
+| Z (the \|0⟩–\|1⟩ axis) | `y` | vertical |
+| X | `x` | horizontal |
+| Y | `z` | depth |
 
-Lo stato del qubit è memorizzato direttamente come coppia di angoli in `Polar2 { theta, phi }`, dove `theta ∈ [0, π]` è l'angolo polare misurato dal polo nord (`|0⟩`, cioè `+y`) e `phi ∈ [0, 2π)` è l'azimut nel piano `x–z`. Lo stato iniziale è `(0, 0)` = `|0⟩`.
+The qubit state is stored directly as a pair of angles in `Polar2 { theta, phi }`, where `theta ∈ [0, π]` is the polar angle measured from the north pole (`|0⟩`, i.e. `+y`) and `phi ∈ [0, 2π)` is the azimuth in the `x–z` plane. The initial state is `(0, 0)` = `|0⟩`.
 
-Questa parametrizzazione corrisponde alla forma standard dello stato puro di un qubit:
+This parametrization matches the standard form of a pure single-qubit state:
 
 ```
 |ψ⟩ = cos(θ/2) |0⟩ + e^(iφ) sin(θ/2) |1⟩
 ```
 
-dove `θ` e `φ` sono esattamente gli angoli sferici del vettore di Bloch.
+where `θ` and `φ` are exactly the spherical angles of the Bloch vector.
 
-### Coordinate polari ↔ cartesiane
+### Polar ↔ Cartesian conversion
 
-`fromPolarToCartesian` (raggio unitario, asse polare `y`):
+`fromPolarToCartesian` (unit radius, polar axis `y`):
 
 ```
 y = cos θ
@@ -76,46 +76,48 @@ x = sin θ · cos φ
 z = sin θ · sin φ
 ```
 
-`fromCartesianToPolar` è l'inversa:
+`fromCartesianToPolar` is its inverse:
 
 ```
 θ = acos(clamp(y, -1, 1))
-φ = atan2(z, x)          → riportato in [0, 2π) sommando 2π se negativo
+φ = atan2(z, x)          → mapped into [0, 2π) by adding 2π when negative
 ```
 
-Il **clamp** di `y` in `[-1, 1]` prima di `acos` è necessario: dopo una catena di rotazioni in virgola mobile il valore può uscire di pochissimo dal dominio, producendo `NaN`.
+**Clamping** `y` to `[-1, 1]` before `acos` is essential: after a chain of floating-point rotations the value can drift marginally outside the domain, which would yield `NaN`.
 
-### Generazione del modello della sfera
+### Sphere mesh generation
 
-La sfera è un reticolo di paralleli e meridiani costruito campionando uniformemente lo spazio degli angoli:
+The sphere is a grid of parallels and meridians built by uniformly sampling angle space:
 
-- `NPAR = 12` paralleli, passo `Δθ = π / (NPAR − 1)` → include entrambi i poli;
-- `NMER = 24` meridiani, passo `Δφ = 2π / NMER` → chiusura ciclica.
+- `NPAR = 12` parallels, step `Δθ = π / (NPAR − 1)` → both poles included;
+- `NMER = 24` meridians, step `Δφ = 2π / NMER` → cyclic closure.
 
-Numero di vertici:
+Vertex count:
 
 ```
 nPoints = NPAR · NMER = 288
 ```
 
-I punti sono memorizzati in ordine *row-major*: l'indice del vertice `(i, j)` è `i·NMER + j`.
+Points are stored in *row-major* order: the index of vertex `(i, j)` is `i·NMER + j`.
 
-Le connessioni (spigoli del wireframe) sono generate in `calculateSphereConnections`:
+Edges are generated in `calculateSphereConnections`:
 
-- un arco **lungo il parallelo**, per ogni punto: `(i, j) → (i, (j+1) mod NMER)` — il modulo chiude l'anello;
-- un arco **lungo il meridiano**, solo se `i < NPAR − 1`: `(i, j) → (i+1, j)`.
+- one arc **along the parallel**, for every point: `(i, j) → (i, (j+1) mod NMER)` — the modulo closes the ring;
+- one arc **along the meridian**, only when `i < NPAR − 1`: `(i, j) → (i+1, j)`.
 
-Da cui:
+Hence:
 
 ```
 nConnections = NPAR·NMER + (NPAR−1)·NMER = 288 + 264 = 552
 ```
 
-### Rotazioni 3D
+Both counts are stored in the `Model` struct: the generation routines derive their loop bounds from `NPAR`/`NMER`, while `nPoints` and `nConnections` drive the per-frame loops in `drawSphere` (rotation, projection and edge drawing) and the size of the allocations.
 
-Le rotazioni sono implementate come matrici di rotazione elementari applicate componente per componente (nessuna libreria di algebra lineare).
+### 3D rotations
 
-**Attorno a Y** (`rotateYVec3`):
+Rotations are implemented as elementary rotation matrices applied component-wise (no linear algebra library involved).
+
+**About Y** (`rotateYVec3`):
 
 ```
 x' =  x·cos α + z·sin α
@@ -123,7 +125,7 @@ y' =  y
 z' = −x·sin α + z·cos α
 ```
 
-**Attorno a X** (`rotateXVec3`):
+**About X** (`rotateXVec3`):
 
 ```
 x' =  x
@@ -131,7 +133,7 @@ y' =  y·cos α − z·sin α
 z' =  y·sin α + z·cos α
 ```
 
-**Attorno a Z** (`rotateZVec3`):
+**About Z** (`rotateZVec3`):
 
 ```
 x' =  x·cos α − y·sin α
@@ -139,90 +141,90 @@ y' =  x·sin α + y·cos α
 z' =  z
 ```
 
-Nel rendering l'ordine di composizione è **fisso**: prima yaw attorno a `y`, poi pitch attorno a `x`.
+In the render path the composition order is **fixed**: yaw about `y` first, then pitch about `x`.
 
 ```
 p_rot = Rx(xRotationAngle) · Ry(yRotationAngle) · p
 ```
 
-Gli angoli di camera sono accumulati dal delta del mouse (`xrel`, `yrel`) moltiplicato per la sensibilità `rotationSense = 0.01` rad/pixel, e riportati in `[0, 2π)` con `fmod` + correzione del segno, per evitare che crescano indefinitamente e perdano precisione.
+Camera angles accumulate from mouse deltas (`xrel`, `yrel`) scaled by the sensitivity `rotationSense = 0.01` rad/pixel, and are wrapped back into `[0, 2π)` with `fmod` plus a sign correction, so they never grow unbounded and lose precision.
 
-### Proiezione prospettica
+### Perspective projection
 
-Proiezione prospettica classica con centro di proiezione sull'asse `z` a distanza `PRESPECTIVE = 3.0`:
+A classic perspective projection with the center of projection on the `z` axis at distance `PRESPECTIVE = 3.0`:
 
 ```
 x_2D = x / (z + d)
-y_2D = y / (z + d)          con d = 3.0
+y_2D = y / (z + d)          with d = 3.0
 ```
 
-Poiché la sfera ha raggio 1, il denominatore resta in `[2, 4]`: mai zero, nessuna divisione singolare e nessun punto dietro il piano di proiezione. Segue la mappatura in coordinate schermo, con inversione dell'asse verticale (in SDL `y` cresce verso il basso):
+Since the sphere has radius 1, the denominator stays within `[2, 4]`: never zero, so there is no singular division and no point falls behind the projection plane. The result is then mapped to screen coordinates, with the vertical axis flipped (in SDL, `y` grows downwards):
 
 ```
 X = round(x_2D · SCALE + xOffset)
 Y = round(yOffset − y_2D · SCALE)
 ```
 
-con `SCALE = 600` e offset inizialmente al centro finestra (`1000×900`), ricalcolati quando si passa a fullscreen.
+with `SCALE = 600` and offsets initially at the window center (`1000×900`), recomputed when switching to fullscreen.
 
-### Ordinamento in profondità (back/front)
+### Depth ordering (back/front)
 
-Non esistendo z-buffer, la profondità è gestita con un **painter's algorithm** semplificato in due passate:
+With no z-buffer available, depth is handled by a simplified **painter's algorithm** in two passes:
 
-1. `drawSphere(&sphere, false)` disegna gli spigoli con `zMid ≤ 0` (emisfero posteriore) in grigio scuro;
-2. si disegna il vettore di stato;
-3. `drawSphere(&sphere, true)` disegna gli spigoli con `zMid > 0` (emisfero anteriore) in bianco semi-trasparente.
+1. `drawSphere(&sphere, false)` draws edges whose `zMid ≤ 0` (rear hemisphere) in dark grey;
+2. the state vector is drawn;
+3. `drawSphere(&sphere, true)` draws edges whose `zMid > 0` (front hemisphere) in semi-transparent white.
 
-Il criterio di appartenenza è il punto medio in `z` dello spigolo dopo la rotazione. Il risultato è che il vettore di stato appare correttamente davanti alla faccia posteriore e dietro a quella anteriore.
+The classification criterion is the edge's midpoint in `z` after rotation, `(z_start + z_end) / 2`. The effect is that the state vector correctly appears in front of the rear face and behind the front one.
 
-### Linee spesse
+### Thick lines
 
-SDL2 disegna solo linee di 1 pixel. `drawThickLine` costruisce una linea spessa **ricorsivamente**: ad ogni livello disegna due linee parallele offsettate di `±(t−1)` pixel e richiama sé stessa con `t−1`, fino al caso base `t = 0`. L'offset è applicato sull'asse *ortogonale* a quello dominante (`|dx| > |dy|` → offset verticale, altrimenti orizzontale), così che lo spessore risulti perpendicolare alla direzione della linea.
+SDL2 can only draw 1-pixel lines. `drawThickLine` builds a thick line **recursively**: at each level it draws two parallel lines offset by `±(t−1)` pixels and calls itself with `t−1`, down to the base case `t = 0`. The offset is applied along the axis *orthogonal* to the dominant one (`|dx| > |dy|` → vertical offset, otherwise horizontal), so the thickness is always perpendicular to the line direction.
 
-### Gate quantistici
+### Quantum gates
 
-I gate di Pauli sono rotazioni di **π** attorno agli assi della sfera di Bloch, e sono implementati come trasformazioni in forma chiusa direttamente sugli angoli `(θ, φ)` — senza passare per le cartesiane:
+The Pauli gates are rotations by **π** about the Bloch sphere axes, and are implemented as closed-form transformations directly on the angles `(θ, φ)` — without going through Cartesian coordinates:
 
-| Gate | Trasformazione sugli angoli | Effetto sul vettore di Bloch |
+| Gate | Angle transformation | Effect on the Bloch vector |
 |---|---|---|
-| **Z** | `φ → (φ + π) mod 2π` | `(x, y, z) → (−x, y, −z)` — rotazione di π attorno all'asse polare |
-| **X** | `θ → π − θ`, `φ → −φ` (riportato in `[0, 2π)`) | `(x, y, z) → (x, −y, −z)` — rotazione di π attorno all'asse `x` |
-| **Y** | `θ → π − θ`, `φ → π − φ` | `(x, y, z) → (−x, −y, z)` — rotazione di π attorno all'asse `z` del codice (= asse Y di Bloch) |
-| **Reset** (`R`) | `θ = 0`, `φ = 0` | riporta lo stato a \|0⟩ |
+| **Z** | `φ → (φ + π) mod 2π` | `(x, y, z) → (−x, y, −z)` — π rotation about the polar axis |
+| **X** | `θ → π − θ`, `φ → −φ` (wrapped into `[0, 2π)`) | `(x, y, z) → (x, −y, −z)` — π rotation about the `x` axis |
+| **Y** | `θ → π − θ`, `φ → π − φ` | `(x, y, z) → (−x, −y, z)` — π rotation about the code's `z` axis (= Bloch Y) |
+| **Reset** (`R`) | `θ = 0`, `φ = 0` | returns the state to \|0⟩ |
 
-Verifica per il gate X: con `θ → π − θ` si ha `cos θ → −cos θ` (quindi `y → −y`) mentre `sin θ` è invariato; con `φ → −φ` si ha `cos φ` invariato (`x → x`) e `sin φ → −sin φ` (`z → −z`). Le tre componenti confermano la rotazione di π attorno a `x`.
+Sanity check for the X gate: `θ → π − θ` gives `cos θ → −cos θ` (so `y → −y`) while `sin θ` is unchanged; `φ → −φ` leaves `cos φ` unchanged (`x → x`) and flips `sin φ` (`z → −z`). All three components confirm a π rotation about `x`.
 
-Le **rotazioni di 45°** (`apply45RotationGate`, attivate con `Shift`) seguono invece il percorso generale, perché non hanno una forma chiusa altrettanto compatta sugli angoli:
+The **45° rotations** (`apply45RotationGate`, triggered with `Shift`) take the general route instead, since they have no comparably compact closed form in angle space:
 
 ```
-polare → cartesiano → matrice di rotazione di π/4 → cartesiano → polare
+polar → Cartesian → π/4 rotation matrix → Cartesian → polar
 ```
 
-La mappatura asse-logico → asse-codice rispetta la convenzione della tabella sopra: `'X'` usa `rotateXVec3`, `'Y'` usa `rotateZVec3`, `'Z'` usa `rotateYVec3`.
+The logical-axis → code-axis mapping follows the convention in the table above: `'X'` uses `rotateXVec3`, `'Y'` uses `rotateZVec3`, `'Z'` uses `rotateYVec3`.
 
-> Nota sulla convenzione degli angoli: una rotazione di `α` del **vettore di Bloch** corrisponde a un gate `R_n(α) = exp(−i·α·σ_n/2)`, cioè a un angolo `α/2` nello spazio di Hilbert. Le rotazioni di 45° qui implementate corrispondono quindi ai gate `R(π/4)`, ovvero — per l'asse Z — al gate **T**.
+> A note on angle conventions: rotating the **Bloch vector** by `α` corresponds to the gate `R_n(α) = exp(−i·α·σ_n/2)`, i.e. an angle of `α/2` in Hilbert space. The 45° rotations implemented here are therefore `R(π/4)` gates — for the Z axis, the **T** gate.
 
 ---
 
-## Installazione e compilazione
+## Installation and build
 
-### Dipendenze
+### Dependencies
 
-- un compilatore C (C99 o superiore): **GCC**, **Clang** o **MinGW-w64**
-- **SDL2** (libreria di sviluppo, non solo il runtime)
-- **libm** (libreria matematica standard, generalmente già presente)
-- `make` (opzionale: il comando di compilazione è una riga sola)
+- a C compiler (C99 or later): **GCC**, **Clang** or **MinGW-w64**
+- **SDL2** (development package, not just the runtime)
+- **libm** (standard math library, usually already present)
+- `make` (optional: the build is a single command line)
 
-### Clonare il repository
+### Clone the repository
 
 ```bash
 git clone https://github.com/teocnt/CBlochSphere.git
 cd CBlochSphere
 ```
 
-### Compilazione con il Makefile
+### Building with the Makefile
 
-Il `Makefile` incluso è configurato per **macOS su Apple Silicon** (percorsi Homebrew `/opt/homebrew`):
+The bundled `Makefile` targets **macOS on Apple Silicon** (Homebrew paths under `/opt/homebrew`):
 
 ```makefile
 CC      = gcc
@@ -232,81 +234,81 @@ TARGET  = sbl
 ```
 
 ```bash
-make          # produce l'eseguibile ./sbl
-make clean    # rimuove l'eseguibile
+make          # produces the ./sbl executable
+make clean    # removes the executable
 ```
 
-Su altre piattaforme è sufficiente sovrascrivere le variabili da riga di comando, senza modificare il file:
+On other platforms you can simply override the variables on the command line, without editing the file:
 
 ```bash
 make CFLAGS="$(sdl2-config --cflags)" LDFLAGS="$(sdl2-config --libs) -lm"
 ```
 
-### Compilazione manuale (portabile)
+### Manual build (portable)
 
-Il modo più robusto su qualunque sistema è lasciare che sia `sdl2-config` (o `pkg-config`) a risolvere i percorsi:
+The most robust approach on any system is letting `sdl2-config` (or `pkg-config`) resolve the paths:
 
 ```bash
 gcc sferaBL.c -o sbl $(sdl2-config --cflags) $(sdl2-config --libs) -lm
 ```
 
-oppure:
+or:
 
 ```bash
 gcc sferaBL.c -o sbl $(pkg-config --cflags --libs sdl2) -lm
 ```
 
-Flag consigliati in sviluppo:
+Recommended flags during development:
 
 ```bash
 gcc -std=c99 -Wall -Wextra -O2 sferaBL.c -o sbl $(sdl2-config --cflags --libs) -lm
 ```
 
-- `-lm` è **obbligatorio** su Linux con glibc meno recenti (`sin`, `cos`, `acos`, `atan2`, `fmod`, `round`); su macOS è innocuo perché libm fa parte di libSystem.
-- `-O2` è consigliato: il loop di rendering ricalcola 288 punti e 552 spigoli due volte per frame.
+- `-lm` is **required** on Linux with older glibc versions (`sin`, `cos`, `acos`, `atan2`, `fmod`, `round`); on macOS it is harmless, since libm is part of libSystem.
+- `-O2` is worth using: the render loop recomputes 288 points and 552 edges twice per frame.
 
-### Esecuzione
+### Running
 
 ```bash
 ./sbl
 ```
 
-Il programma non accetta argomenti da riga di comando e apre direttamente una finestra `1000×900`.
+The program takes no command-line arguments and opens a `1000×900` window directly.
 
 ---
 
-## Compatibilità tra sistemi operativi
+## Cross-platform compatibility
 
-Il codice è **portabile a livello sorgente**: usa solo C standard, `math.h` e SDL2, senza chiamate di sistema specifiche. L'unico punto non portabile del repository è il `Makefile`, tarato su Homebrew ARM.
+The code is **portable at the source level**: it uses only standard C, `math.h` and SDL2, with no platform-specific system calls. The only non-portable piece in the repository is the `Makefile`, which is tuned for Homebrew on ARM.
 
 ### macOS
 
-**Apple Silicon (M1/M2/M3/M4)** — configurazione predefinita del Makefile.
+**Apple Silicon (M1/M2/M3/M4)** — the Makefile's default configuration.
 
 ```bash
 brew install sdl2
 make
 ```
 
-Homebrew installa in `/opt/homebrew`, esattamente i percorsi già presenti nel Makefile.
+Homebrew installs under `/opt/homebrew`, exactly the paths already in the Makefile.
 
-**Intel (x86_64)** — Homebrew installa in `/usr/local`, quindi i percorsi vanno sovrascritti:
+**Intel (x86_64)** — Homebrew installs under `/usr/local`, so the paths need overriding:
 
 ```bash
 brew install sdl2
 make CFLAGS="-I/usr/local/include" LDFLAGS="-L/usr/local/lib -lSDL2"
 ```
 
-Note:
+Notes:
 
-- su macOS `gcc` è tipicamente un alias di **Clang**; il codice compila correttamente con entrambi;
-- `M_PI` è disponibile di default in `math.h` su macOS;
-- se si vuole distribuire un `.app`, SDL2 richiede che il main sia gestito da `SDLmain`; per l'uso da terminale come qui non serve nulla di particolare;
-- al primo avvio macOS può richiedere permessi di accesso allo schermo o mostrare un avviso Gatekeeper per un binario non firmato.
+- on macOS `gcc` is typically an alias for **Clang**; the code compiles fine with either;
+- `M_PI` is available from `math.h` by default on macOS;
+- to ship a `.app` bundle, SDL2 expects main to be handled by `SDLmain`; for terminal use as here, nothing special is needed;
+- on first launch macOS may ask for screen-access permissions or show a Gatekeeper warning for an unsigned binary.
 
 ### Linux
 
-Piattaforma di riferimento più semplice. Installazione dei pacchetti di sviluppo:
+The most straightforward target. Install the development packages:
 
 ```bash
 # Debian / Ubuntu / Linux Mint
@@ -322,101 +324,99 @@ sudo pacman -S base-devel sdl2
 sudo zypper install gcc make libSDL2-devel
 ```
 
-Compilazione:
+Build:
 
 ```bash
 gcc sferaBL.c -o sbl $(sdl2-config --cflags --libs) -lm
 ```
 
-Note:
+Notes:
 
-- `-lm` è necessario su distribuzioni con glibc < 2.35 (con glibc ≥ 2.35 libm è fusa in libc, ma il flag resta innocuo);
-- `M_PI` è esposto da `math.h` con le estensioni POSIX/GNU attive per default; compilando con `-std=c99` **stretto** potrebbe non esserlo — usare `-std=gnu99` oppure `-D_GNU_SOURCE`;
-- su **Wayland** SDL2 funziona sia nativamente sia via XWayland; in caso di problemi di rendering forzare il backend con `SDL_VIDEODRIVER=x11 ./sbl`;
-- il renderer è creato con `SDL_RENDERER_ACCELERATED`: su macchine senza driver GPU adeguati (VM, server headless) la creazione può fallire e il programma esce con messaggio d'errore. In quel caso si può forzare il fallback software con `SDL_RENDER_DRIVER=software ./sbl`;
-- il fullscreen usa `SDL_WINDOW_FULLSCREEN_DESKTOP`, che su Linux dipende dal window manager: alcuni WM tiling potrebbero ignorarlo.
+- `-lm` is needed on distros with glibc < 2.35 (from glibc 2.35 onwards libm is merged into libc, but the flag stays harmless);
+- `M_PI` is exposed by `math.h` with POSIX/GNU extensions enabled by default; compiling with **strict** `-std=c99` may hide it — use `-std=gnu99` or `-D_GNU_SOURCE`;
+- on **Wayland**, SDL2 works both natively and through XWayland; if rendering misbehaves, force the backend with `SDL_VIDEODRIVER=x11 ./sbl`;
+- the renderer is created with `SDL_RENDERER_ACCELERATED`: on machines without suitable GPU drivers (VMs, headless servers) creation can fail and the program exits with an error message. In that case force the software fallback with `SDL_RENDER_DRIVER=software ./sbl`;
+- fullscreen uses `SDL_WINDOW_FULLSCREEN_DESKTOP`, whose behaviour on Linux depends on the window manager; some tiling WMs may ignore it.
 
 ### Windows
 
-Nessun `Makefile` pronto: il percorso più semplice è **MSYS2 + MinGW-w64**.
+No ready-made `Makefile`: the simplest path is **MSYS2 + MinGW-w64**.
 
 ```bash
-# dalla shell "MSYS2 MINGW64"
+# from the "MSYS2 MINGW64" shell
 pacman -S mingw-w64-x86_64-gcc mingw-w64-x86_64-SDL2 mingw-w64-x86_64-pkg-config make
 gcc sferaBL.c -o sbl.exe $(pkg-config --cflags --libs sdl2) -lm
 ```
 
-Per un eseguibile che apra **anche** una console (utile, dato che il programma stampa lo stato su stdout) non aggiungere `-mwindows`. Con MinGW la funzione `main` viene rimappata da SDL su `SDL_main`: se si ottengono errori di link relativi a `WinMain`, aggiungere `-lmingw32 -lSDL2main -lSDL2` **in quest'ordine**.
+To keep a console window attached (useful, since the program prints the state to stdout), do **not** pass `-mwindows`. Under MinGW, SDL remaps `main` onto `SDL_main`: if you get link errors mentioning `WinMain`, add `-lmingw32 -lSDL2main -lSDL2` **in that order**.
 
-Alternativa con **MinGW-w64 standalone** e SDL2 scaricata manualmente da <https://libsdl.org>:
+Alternative with **standalone MinGW-w64** and SDL2 downloaded manually from <https://libsdl.org>:
 
 ```bash
 gcc sferaBL.c -o sbl.exe -IC:\SDL2\include -LC:\SDL2\lib -lmingw32 -lSDL2main -lSDL2 -lm
 ```
 
-`SDL2.dll` (dalla cartella `lib\x64`) va copiata accanto a `sbl.exe`, altrimenti il programma non parte.
+`SDL2.dll` (from `lib\x64`) must be copied next to `sbl.exe`, otherwise the program will not start.
 
-**MSVC (Visual Studio) — richiede modifiche al sorgente**, per due incompatibilità note:
+**MSVC (Visual Studio) — requires source changes**, because of two known incompatibilities:
 
-1. `M_PI` non è definita in `math.h` di MSVC senza `#define _USE_MATH_DEFINES` prima dell'`#include <math.h>` (o `/D_USE_MATH_DEFINES` da riga di comando);
-2. `drawSphere` usa **VLA** (array a lunghezza variabile: `Vec2 projectedPoints[sphere->model.nPoints]`), feature C99 che MSVC non supporta. Servirebbe un array a dimensione fissa o `malloc`.
+1. `M_PI` is not defined in MSVC's `math.h` without `#define _USE_MATH_DEFINES` before `#include <math.h>` (or `/D_USE_MATH_DEFINES` on the command line);
+2. `drawSphere` uses **VLAs** (variable-length arrays: `Vec2 projectedPoints[sphere->model.nPoints]`), a C99 feature MSVC does not support. A fixed-size array or `malloc` would be needed.
 
-Per queste ragioni **MinGW/MSYS2 è la toolchain consigliata su Windows**. Funziona anche la compilazione via WSL2 seguendo le istruzioni Linux (con WSLg per la finestra grafica).
+For those reasons **MinGW/MSYS2 is the recommended toolchain on Windows**. Building through WSL2 also works, following the Linux instructions (with WSLg providing the window).
 
-### Riepilogo compatibilità
+### Compatibility summary
 
-| Sistema | Toolchain | Stato | Note |
+| System | Toolchain | Status | Notes |
 |---|---|---|---|
-| macOS Apple Silicon | Clang/GCC + Homebrew | ✅ configurazione predefinita | Makefile pronto |
-| macOS Intel | Clang/GCC + Homebrew | ✅ | sovrascrivere i percorsi con `/usr/local` |
-| Linux (X11) | GCC/Clang | ✅ | usare `sdl2-config`, aggiungere `-lm` |
-| Linux (Wayland) | GCC/Clang | ✅ | eventuale fallback `SDL_VIDEODRIVER=x11` |
-| Windows MSYS2/MinGW | GCC | ✅ | ordine dei flag di link, `SDL2.dll` a fianco |
-| Windows MSVC | cl.exe | ⚠️ | serve `_USE_MATH_DEFINES` e rimozione dei VLA |
-| WSL2 | GCC | ✅ | richiede WSLg o un X server |
-| BSD | Clang | ✅ (non testato) | `pkg-config sdl2` |
+| macOS Apple Silicon | Clang/GCC + Homebrew | ✅ default configuration | Makefile ready to use |
+| macOS Intel | Clang/GCC + Homebrew | ✅ | override paths with `/usr/local` |
+| Linux (X11) | GCC/Clang | ✅ | use `sdl2-config`, add `-lm` |
+| Linux (Wayland) | GCC/Clang | ✅ | optional `SDL_VIDEODRIVER=x11` fallback |
+| Windows MSYS2/MinGW | GCC | ✅ | mind link flag order, ship `SDL2.dll` |
+| Windows MSVC | cl.exe | ⚠️ | needs `_USE_MATH_DEFINES` and VLA removal |
+| WSL2 | GCC | ✅ | requires WSLg or an X server |
+| BSD | Clang | ✅ (untested) | `pkg-config sdl2` |
 
 ---
 
-## Struttura del progetto
+## Project layout
 
 ```
 .
-├── Makefile      # build a singola regola, percorsi Homebrew ARM
-├── sferaBL.c     # sorgente unico: modello, matematica, rendering, input
-├── .gitignore    # ignora l'eseguibile "sbl"
+├── Makefile      # single-rule build, Homebrew ARM paths
+├── sferaBL.c     # single source file: model, math, rendering, input
+├── .gitignore    # ignores the "sbl" executable
 └── README.md
 ```
 
-Il sorgente è organizzato in blocchi funzionali:
+The source is organized into functional blocks:
 
-- **tipi** — `Polar2`, `Vec2`, `Vec3`, `Connection`, `Model`, `Sphere`;
-- **conversioni** — `fromPolarToCartesian`, `fromCartesianToPolar`;
-- **costruzione del modello** — `calculateSphereModel`, `calculateSpherePoints`, `calculateSphereConnections`;
-- **algebra 3D** — `rotateXVec3`, `rotateYVec3`, `rotateZVec3`;
+- **types** — `Polar2`, `Vec2`, `Vec3`, `Connection`, `Model`, `Sphere`;
+- **conversions** — `fromPolarToCartesian`, `fromCartesianToPolar`;
+- **model construction** — `calculateSphereModel`, `calculateSpherePoints`, `calculateSphereConnections`;
+- **3D algebra** — `rotateXVec3`, `rotateYVec3`, `rotateZVec3`;
 - **rendering** — `projectsP3`, `drawSphere`, `drawSystemVector`, `drawThickLine`;
-- **gate quantistici** — `applyXGate`, `applyYGate`, `applyZGate`, `apply45RotationGate`, `resetState`;
-- **main** — inizializzazione SDL, event loop, ciclo di disegno.
+- **quantum gates** — `applyXGate`, `applyYGate`, `applyZGate`, `apply45RotationGate`, `resetState`;
+- **main** — SDL initialization, event loop, draw loop.
 
-Parametri modificabili tramite `#define` in testa al file:
+Tunable parameters via `#define` at the top of the file:
 
-| Macro | Valore | Significato |
+| Macro | Value | Meaning |
 |---|---|---|
-| `WINDOW_WIDTH` / `WINDOW_HEIGHT` | 1000 / 900 | dimensioni finestra |
-| `SCALE` | 600 | fattore di scala della proiezione |
-| `PRESPECTIVE` | 3.0 | distanza del centro di proiezione |
-| `NPAR` | 12 | numero di paralleli |
-| `NMER` | 24 | numero di meridiani |
-| `DELAY` | 20 | ritardo di frame (dichiarato, attualmente non usato) |
-| `RADIUS` | 1 | raggio della sfera |
+| `WINDOW_WIDTH` / `WINDOW_HEIGHT` | 1000 / 900 | window size |
+| `SCALE` | 600 | projection scale factor |
+| `PRESPECTIVE` | 3.0 | distance of the center of projection |
+| `NPAR` | 12 | number of parallels |
+| `NMER` | 24 | number of meridians |
+| `RADIUS` | 1 | sphere radius (declared; the mesh is always built on the unit sphere) |
 
 ---
 
-## Note e limiti noti
+## Notes and known limits
 
-- **Poli degeneri**: con `θ = 0` e `θ = π` i `NMER` punti di un parallelo coincidono nello stesso vertice, quindi ai poli vengono disegnati archi di lunghezza nulla. È un costo trascurabile ma spiega perché il numero di vertici effettivamente distinti è `(NPAR−2)·NMER + 2 = 242` anziché 288.
-- **Loop non limitato in frequenza**: la macro `DELAY` è definita ma non viene mai usata (nessuna `SDL_Delay`) e il renderer non usa VSync, quindi il ciclo gira alla massima velocità possibile con conseguente uso intensivo di CPU/GPU. Aggiungere `SDL_RENDERER_PRESENTVSYNC` o una `SDL_Delay(DELAY)` risolverebbe.
-- **Calcolo di `zMid` in `drawSphere`**: `z1` e `z2` leggono entrambi `rotatedPoints[tmpC.start].z`, quindi il test di profondità di fatto usa solo il punto iniziale dello spigolo invece del punto medio. In pratica l'effetto visivo è quasi identico (gli spigoli sono corti), ma sugli archi a cavallo dell'orizzonte la classificazione front/back può risultare leggermente imprecisa.
-- **Titolo della finestra**: è ancora `"rotating cube"`, residuo del progetto da cui deriva il motore di rendering.
-- **Memoria**: `sphereData.model.points` e `.connections` sono allocati con `malloc` e non liberati prima dell'uscita; il campo `rotatedPoints` della struct `Model` non viene mai usato (il rendering usa un VLA locale). Nessun impatto pratico, il sistema operativo recupera tutto alla terminazione.
-- **Modello fisico**: viene rappresentato solo lo **stato puro** di un qubit singolo (vettore sulla superficie della sfera). Stati misti, che vivono all'interno della sfera, e sistemi multi-qubit non sono modellati.
+- **Degenerate poles**: at `θ = 0` and `θ = π` the `NMER` points of a parallel collapse onto the same vertex, so zero-length arcs get drawn at the poles. The cost is negligible, but it explains why the number of genuinely distinct vertices is `(NPAR−2)·NMER + 2 = 242` rather than 288.
+- **Unthrottled loop**: the renderer is created without VSync and there is no frame delay, so the loop runs as fast as it can and keeps CPU/GPU busy. Adding `SDL_RENDERER_PRESENTVSYNC` (or an `SDL_Delay`) would cap it.
+- **Unit radius**: the `radius` field of `Sphere` (and the `RADIUS` macro) is never read — the model is always generated on the unit sphere, and apparent size is controlled by `SCALE` alone.
+- **Fullscreen offsets**: centering offsets are recomputed by calling `SDL_GetWindowSize` right after `SDL_SetWindowFullscreen`. On some platforms the new size is not reported immediately, so the drawing can stay off-center until the next toggle; handling `SDL_WINDOWEVENT_SIZE_CHANGED` would be more robust. Note also that `SCALE` is not rescaled, so the sphere keeps its pixel size in fullscreen.
+- **Physical model**: only the **pure state** of a single qubit is represented (a vector on the sphere's surface). Mixed states, which live inside the sphere, and multi-qubit systems are not modelled.
