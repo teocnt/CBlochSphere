@@ -16,7 +16,10 @@
 #define NPAR 12
 #define NMER 24
 
-
+typedef struct{
+  double max;
+  double min;
+}MaxMin;
 
 typedef int Index;
 
@@ -60,6 +63,7 @@ typedef struct{
 double globalScaling = SCALE;
 double xOffset = OFFSETX;
 double yOffset = OFFSETY;
+double globalPrespective = PRESPECTIVE;
 
 
 //oggetti SDL
@@ -68,15 +72,21 @@ SDL_Renderer* renderer;
 SDL_Event event;
 
 
+//void findMaxMinXY(Vec3[NPUNTI],MaxMin[2]);
+//double calculateScaleFactor(double,double);
+double calculateScaleFactor(double,double,double);
+double calculateXOffsetFactor(double);
+double calculateYOffsetFactor(double);
+double calculateGlobalPrespective(double);
 
-Vec3 fromPolarToCartesian(Polar2);
+Vec3 fromPolarToCartesian(Polar2,double);
 Polar2 fromCartesianToPolar(Vec3);
 void calculateSphereModel(Sphere*);
-void calculateSpherePoints(int, Vec3*);
+void calculateSpherePoints(int, Vec3*,double);
 void calculateSphereConnections(int, Connection*);
 void drawSphere(Sphere*,bool);
 Vec2 projectsP3(Vec3);
-void drawSystemVector(Polar2,double,double);
+void drawSystemVector(Polar2,double,double,double);
 void drawThickLine(SDL_Renderer*,Vec2,Vec2,int);
 Vec3 rotateYVec3(Vec3,double);
 Vec3 rotateXVec3(Vec3,double);
@@ -85,14 +95,14 @@ void applyXGate(Polar2*);
 void applyYGate(Polar2*);
 void applyZGate(Polar2*);
 void resetState(Polar2*);
-void apply45RotationGate(Polar2*,char);
+void apply45RotationGate(Polar2*,char,double);
 
 
 int main(void){
   bool execution = true;
   Polar2 systemState = {0,0};
   //modello sfera
-  Sphere sphereData = {1,{NULL,NPAR*NMER,NULL,(NPAR*NMER) + ((NPAR-1)*NMER),0,0}};
+  Sphere sphereData = {RADIUS,{NULL,NPAR*NMER,NULL,(NPAR*NMER) + ((NPAR-1)*NMER),0,0}};
   sphereData.model.points = malloc(sphereData.model.nPoints*sizeof(Vec3));
   sphereData.model.connections = malloc(sphereData.model.nConnections*sizeof(Connection));
   if(sphereData.model.points == NULL || sphereData.model.connections == NULL){
@@ -105,6 +115,7 @@ int main(void){
   Uint32 flags;
   int actualWidth;
   int actualHeight;
+  MaxMin maxMinCoordinate[2];
 
   if (SDL_Init(SDL_INIT_VIDEO) != 0){
     printf("error while initializing SDL: %s\n",SDL_GetError());
@@ -142,7 +153,13 @@ int main(void){
     return 1;
   }
   
+  SDL_GetWindowSize(window, &actualWidth, &actualHeight);
+  globalScaling = calculateScaleFactor(sphereData.radius,actualWidth,actualHeight);
+  xOffset = calculateXOffsetFactor(actualWidth);
+  yOffset = calculateYOffsetFactor(actualHeight);
+  globalPrespective = calculateGlobalPrespective(sphereData.radius);
   printf("initial system state theta: %.2f, phi: %.2f\n",systemState.theta,systemState.phi);
+  
   while(execution){
 
     //event handling
@@ -157,19 +174,19 @@ int main(void){
             break;
           case SDLK_x:
             if(event.key.keysym.mod & KMOD_SHIFT){
-              apply45RotationGate(&systemState,'X');
+              apply45RotationGate(&systemState,'X',sphereData.radius);
             }else applyXGate(&systemState);
             printf("new system state theta: %.2f, phi: %.2f\n",systemState.theta,systemState.phi);
             break;
           case SDLK_y:
             if(event.key.keysym.mod & KMOD_SHIFT){
-              apply45RotationGate(&systemState,'Y');
+              apply45RotationGate(&systemState,'Y',sphereData.radius);
             }else applyYGate(&systemState);
             printf("new system state theta: %.2f, phi: %.2f\n",systemState.theta,systemState.phi);
             break;
           case SDLK_z:
             if(event.key.keysym.mod & KMOD_SHIFT){
-              apply45RotationGate(&systemState,'Z');
+              apply45RotationGate(&systemState,'Z',sphereData.radius);
             }else applyZGate(&systemState);
             printf("new system state theta: %.2f, phi: %.2f\n",systemState.theta,systemState.phi);
             break;
@@ -186,8 +203,10 @@ int main(void){
               SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN_DESKTOP);
             }
             SDL_GetWindowSize(window, &actualWidth, &actualHeight);
-            xOffset = actualWidth /2.0;
-            yOffset = actualHeight / 2.0;
+
+            globalScaling = calculateScaleFactor(sphereData.radius,actualWidth,actualHeight);
+            xOffset = calculateXOffsetFactor(actualWidth);
+            yOffset = calculateYOffsetFactor(actualHeight);
             break;
           default:
             break;
@@ -221,7 +240,7 @@ int main(void){
     
 
     SDL_SetRenderDrawColor(renderer, 0,0,255,255);
-    drawSystemVector(systemState,sphereData.model.xRotationAngle,sphereData.model.yRotationAngle);
+    drawSystemVector(systemState,sphereData.model.xRotationAngle,sphereData.model.yRotationAngle,sphereData.radius);
     
     SDL_SetRenderDrawColor(renderer, 255,255,255,125);
     drawSphere(&sphereData,true);
@@ -242,17 +261,23 @@ int main(void){
 }
 
 
-Vec3 fromPolarToCartesian(Polar2 polarCoordinates){
+Vec3 fromPolarToCartesian(Polar2 polarCoordinates,double radius){
   Vec3 cartesianCoordinates;
 
-  cartesianCoordinates.y = cos(polarCoordinates.theta);
-  cartesianCoordinates.x = sin(polarCoordinates.theta) * cos(polarCoordinates.phi);
-  cartesianCoordinates.z = sin(polarCoordinates.theta) * sin(polarCoordinates.phi);
+  cartesianCoordinates.y = radius * cos(polarCoordinates.theta);
+  cartesianCoordinates.x = radius * sin(polarCoordinates.theta) * cos(polarCoordinates.phi);
+  cartesianCoordinates.z = radius * sin(polarCoordinates.theta) * sin(polarCoordinates.phi);
   return cartesianCoordinates;
 }
 
 Polar2 fromCartesianToPolar(Vec3 cartesianCoordinates){
-  double y_val = cartesianCoordinates.y;
+  double r = sqrt(cartesianCoordinates.x * cartesianCoordinates.x + 
+                  cartesianCoordinates.y * cartesianCoordinates.y + 
+                  cartesianCoordinates.z * cartesianCoordinates.z);
+  
+  if (r == 0) r = 1.0;
+
+  double y_val = cartesianCoordinates.y/r;
   if(y_val > 1.0) y_val = 1.0;
   if(y_val < -1.0) y_val = -1.0;
   double theta = acos(y_val);
@@ -268,11 +293,11 @@ Polar2 fromCartesianToPolar(Vec3 cartesianCoordinates){
 }
 
 void calculateSphereModel(Sphere *sphere){
-  calculateSpherePoints(sphere->model.nPoints,sphere->model.points);
+  calculateSpherePoints(sphere->model.nPoints,sphere->model.points,sphere->radius);
   calculateSphereConnections(sphere->model.nConnections, sphere->model.connections);
 }
 
-void calculateSpherePoints(int nPoints, Vec3* points){
+void calculateSpherePoints(int nPoints, Vec3* points,double radius){
   Polar2 polarCoordinates = {0,0};
   double passoTheta = M_PI/(NPAR - 1);
   double passoPhi = (2 * M_PI)/(NMER);
@@ -281,7 +306,7 @@ void calculateSpherePoints(int nPoints, Vec3* points){
     polarCoordinates.theta = passoTheta*i;
     for(int j = 0; j < NMER; j++){
       polarCoordinates.phi = passoPhi * j;
-      points[pointIndex] = fromPolarToCartesian(polarCoordinates);
+      points[pointIndex] = fromPolarToCartesian(polarCoordinates,radius);
       pointIndex++;
     }
   }
@@ -343,16 +368,18 @@ void drawSphere(Sphere *sphere,bool drawFront){
 
 
 Vec2 projectsP3(Vec3 point){
-  double x2D = point.x/(point.z+PRESPECTIVE);
-  double y2D = point.y/(point.z+PRESPECTIVE);
+  double z = point.z + globalPrespective;
+  if (z == 0) z =1;
+  double x2D = point.x/(z);
+  double y2D = point.y/(z);
   x2D = round((x2D*globalScaling)+xOffset);
   y2D = round(yOffset - (y2D * globalScaling));
   Vec2 pointRet = {x2D,y2D};
   return pointRet;
 }
 
-void drawSystemVector(Polar2 systemState,double xRotationAngle, double yRotationAngle){
-  Vec3 cartesianPoint = fromPolarToCartesian(systemState);
+void drawSystemVector(Polar2 systemState,double xRotationAngle, double yRotationAngle,double radius){
+  Vec3 cartesianPoint = fromPolarToCartesian(systemState,radius);
   Vec2 pPoint = projectsP3(rotateXVec3(rotateYVec3(cartesianPoint,yRotationAngle),xRotationAngle));
   Vec2 origin = {xOffset,yOffset};
   SDL_Rect systemRect = {
@@ -432,9 +459,9 @@ void resetState(Polar2 * systemState){
   systemState->phi = 0.0;
 }
 
-void apply45RotationGate(Polar2 *systemState,char axis){
+void apply45RotationGate(Polar2 *systemState,char axis,double radius){
   Polar2 newState;
-  Vec3 cartesianCoordinates = fromPolarToCartesian(*systemState);
+  Vec3 cartesianCoordinates = fromPolarToCartesian(*systemState,radius);
   switch(axis){
     case 'X':
       cartesianCoordinates = rotateXVec3(cartesianCoordinates,M_PI/4);
@@ -452,4 +479,62 @@ void apply45RotationGate(Polar2 *systemState,char axis){
   newState = fromCartesianToPolar(cartesianCoordinates);
   systemState->theta = newState.theta;
   systemState->phi = newState.phi;
+}
+
+
+/*void findMaxMinXY(Vec3 cloudPoints[NPUNTI],MaxMin maxMinCoordinate[2]){
+  MaxMin mmX;
+  MaxMin mmY;
+
+  mmX.min = cloudPoints[0].x; mmX.max = cloudPoints[0].x;
+  mmY.min = cloudPoints[0].y; mmY.max = cloudPoints[0].y;
+  for (int i = 1; i < NPUNTI; i++) {
+      if (cloudPoints[i].x < mmX.min) mmX.min = cloudPoints[i].x;
+      if (cloudPoints[i].x > mmX.max) mmX.max = cloudPoints[i].x;
+      if (cloudPoints[i].y < mmY.min) mmY.min = cloudPoints[i].y;
+      if (cloudPoints[i].y > mmY.max) mmY.max = cloudPoints[i].y;
+  }
+  maxMinCoordinate[0] = mmX;
+  maxMinCoordinate[1] = mmY;
+}*/
+
+
+/*double calculateScaleFactor(double actualWidth, double actualHeight) {
+    // Troviamo la dimensione minore della finestra per non uscire dai bordi
+    double minDimension = (actualWidth < actualHeight) ? actualWidth : actualHeight;
+    
+    // Raggio desiderato sullo schermo in pixel (lasciando 80px di margine totale)
+    double targetPixelRadius = (minDimension - 400.0) / 2.0; 
+    
+    // Calcoliamo lo scaling affinché la sfera riempia esattamente targetPixelRadius
+    return targetPixelRadius * PRESPECTIVE;
+}*/
+
+
+double calculateScaleFactor(double radius, double actualWidth, double actualHeight){
+  double dynamicScaling;
+  double rangeX = 2 * radius;
+  double rangeY = 2 * radius;
+  if (rangeX == 0) rangeX = 2; // Avoiding division by 0
+  if (rangeY == 0) rangeY = 2;
+
+  // Calculating dynamic scaling for the X and Y axes based on the length of the curve in that corresponding dimension (leaving a 10 character margin)
+  double scaleX = (actualWidth - 50.0) / rangeX;
+  double scaleY = (actualHeight - 50.0) / rangeY;
+  
+  // Now we have to choose one scale factor because we don't want the curve to stretch, and we choose the minimum one because we don't want any point of the curve to be rendered off-screen
+  dynamicScaling = (scaleX < scaleY) ? scaleX : scaleY;
+  return dynamicScaling;
+}
+
+double calculateXOffsetFactor(double actualWidth){
+  return (actualWidth / 2.0);
+}
+
+double calculateYOffsetFactor(double actualHeight){
+  return (actualHeight / 2.0);
+}
+
+double calculateGlobalPrespective(double radius){
+  return radius * PRESPECTIVE;
 }
