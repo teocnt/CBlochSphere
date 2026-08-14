@@ -13,8 +13,10 @@
 #define PRESPECTIVE 3.0
 
 #define RADIUS 1
-#define NPAR 12
+#define NPAR 13
 #define NMER 24
+
+
 
 typedef struct{
   double max;
@@ -96,6 +98,7 @@ void applyYGate(Polar2*);
 void applyZGate(Polar2*);
 void resetState(Polar2*);
 void apply45RotationGate(Polar2*,char,double);
+void drawAxis(double,double);
 
 
 int main(void){
@@ -234,7 +237,10 @@ int main(void){
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
     SDL_SetRenderDrawColor(renderer, 0, 0,0, 255);
     SDL_RenderClear(renderer);
-    
+ 
+    SDL_SetRenderDrawColor(renderer, 0, 255, 0, 255);
+    drawAxis(sphereData.model.xRotationAngle,sphereData.model.yRotationAngle);  
+
     SDL_SetRenderDrawColor(renderer, 70, 70, 70, 255);
     drawSphere(&sphereData,false);
     
@@ -386,7 +392,7 @@ void drawSystemVector(Polar2 systemState,double xRotationAngle, double yRotation
     .x = pPoint.x-1,
     .y = pPoint.y-1,
     .w = 3,
-    .h = 3
+    .h = 3 
   };
   SDL_RenderFillRect(renderer, &systemRect);
   drawThickLine(renderer,origin,pPoint,3);
@@ -537,4 +543,18 @@ double calculateYOffsetFactor(double actualHeight){
 
 double calculateGlobalPrespective(double radius){
   return radius * PRESPECTIVE;
+}
+
+void drawAxis(double xAngle, double yAngle){
+  Vec3 xAxisPoint = {2,0,0};
+  Vec3 yAxisPoint = {0,2,0};
+  Vec3 zAxisPoint = {0,0,2};
+  Vec2 xAxisPointProject = projectsP3(xAxisPoint);
+  Vec2 yAxisPointProject = projectsP3(yAxisPoint);
+  Vec2 zAxisPointProject = projectsP3(zAxisPoint);
+  
+
+  SDL_RenderDrawLine(renderer, xOffset,yOffset,xAxisPointProject.x,xAxisPointProject.y);
+  SDL_RenderDrawLine(renderer, xOffset,yOffset,yAxisPointProject.x,yAxisPointProject.y);
+  SDL_RenderDrawLine(renderer, xOffset,yOffset,zAxisPointProject.x,zAxisPointProject.y);
 }
